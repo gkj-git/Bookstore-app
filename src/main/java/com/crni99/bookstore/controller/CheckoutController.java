@@ -1,61 +1,62 @@
 package com.crni99.bookstore.controller;
 
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import java.util.List;
 
-import javax.validation.Valid;
-
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.validation.BindingResult;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.web.servlet.MockMvc;
 
 import com.crni99.bookstore.model.Book;
-import com.crni99.bookstore.model.Customer;
 import com.crni99.bookstore.service.BillingService;
 import com.crni99.bookstore.service.EmailService;
 import com.crni99.bookstore.service.ShoppingCartService;
 
-@Controller
-@RequestMapping("/checkout")
-public class CheckoutController {
+@WebMvcTest(CheckoutController.class)
+class CheckoutControllerTest {
 
-	private final BillingService billingService;
-	private final EmailService emailService;
-	private final ShoppingCartService shoppingCartService;
+    @Autowired
+    private MockMvc mockMvc;
 
-	public CheckoutController(BillingService billingService, EmailService emailService,
-			ShoppingCartService shoppingCartService) {
-		this.billingService = billingService;
-		this.emailService = emailService;
-		this.shoppingCartService = shoppingCartService;
-	}
+    @MockBean
+    private BillingService billingService;
 
-	@GetMapping(value = { "", "/" })
-	public String checkout(Model model) {
-		List<Book> cart = shoppingCartService.getCart();
-		if (cart.isEmpty()) {
-			return "redirect:/cart";
-		}
-		model.addAttribute("customer", new Customer());
-		model.addAttribute("productsInCart", cart);
-		model.addAttribute("totalPrice", shoppingCartService.totalPrice().toString());
-		model.addAttribute("shippingCosts", shoppingCartService.getshippingCosts());
-		return "checkout";
-	}
+    @MockBean
+    private EmailService emailService;
 
-	@PostMapping("/placeOrder")
-	public String placeOrder(@Valid Customer customer, BindingResult result, RedirectAttributes redirect) {
-		if (result.hasErrors()) {
-			return "/checkout";
-		}
-		billingService.createOrder(customer, shoppingCartService.getCart());
-		//emailService.sendEmail(customer.getEmail(), "bookstore - Order Confirmation", "Your order has been confirmed.");
-		shoppingCartService.emptyCart();
-		redirect.addFlashAttribute("successMessage", "The order is confirmed, check your email.");
-		return "redirect:/cart";
-	}
+    @MockBean
+    private ShoppingCartService shoppingCartService;
 
+    @Test
+    void shouldPlaceOrder() throws Exception {
+
+        // Arrange
+        when(shoppingCartService.getCart())
+                .thenReturn(List.of(new Book()));
+
+        // Act + Assert
+        mockMvc.perform(post("/checkout/placeOrder")
+                .with(csrf())
+                .param("email", "mail@example.com")
+                .param("firstName", "John")
+                .param("lastName", "Doe"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/cart"));
+
+        // Verify
+        verify(emailService).sendEmail(
+                eq("mail@example.com"),
+                eq("bookstore - Order Confirmation"),
+                eq("Your order has been confirmed.")
+        );
+    }
 }
